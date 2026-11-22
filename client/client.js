@@ -223,6 +223,10 @@ function CloudCmdProto({DOM, Listeners}) {
     async function baseInit() {
         const files = DOM.getFiles();
         
+        // capture before the first syncPanelsHistory() overwrites them
+        const savedPanels = await Storage.getJson('panels-path');
+        const hadRightParam = new URLSearchParams(location.search).has('right');
+        
         CloudCmd.on('current-file', DOM.updateCurrentInfo);
         CloudCmd.on('current-name', saveCurrentName);
         
@@ -236,6 +240,7 @@ function CloudCmdProto({DOM, Listeners}) {
                 // it should be handled with this.route
                 // overwre otherwise
                 history: !location.hash,
+                replaceHistory: true,
             });
         
         const dirPath = DOM.getCurrentDirPath();
@@ -247,6 +252,8 @@ function CloudCmdProto({DOM, Listeners}) {
         
         Listeners.initKeysPanel();
         
+        await restorePanels(savedPanels, hadRightParam);
+        
         if (!CloudCmd.config('dirStorage'))
             return;
         
@@ -254,6 +261,51 @@ function CloudCmdProto({DOM, Listeners}) {
         
         if (!data)
             await Storage.setJson(dirPath, getJsonFromFileTable());
+    }
+    
+    async function restorePanels(saved, hadRightParam) {
+        if (CloudCmd.config('oneFilePanel'))
+            return;
+        
+        // server already painted both panels from the url,
+        // just normalize the history state object
+        if (hadRightParam)
+            return DOM.syncPanelsHistory({
+                replace: true,
+            });
+        
+        if (!saved)
+            return;
+        
+        const isRootVisit = location.pathname.replace(CloudCmd.prefix, '') === '/';
+        const {left, right} = DOM.getPanelsState();
+        let restored = false;
+        
+        // left: url is authoritative for /fs/<path>, restore on root visit only
+        if (isRootVisit && saved.left && saved.left !== left) {
+            await CloudCmd.changeDir(saved.left, {
+                history: false,
+            });
+            restored = true;
+        }
+        
+        // right: restore passively - no focus steal, no history push
+        if (saved.right && saved.right !== right) {
+            const rightPanel = DOM.getByDataName('js-right');
+            
+            await CloudCmd.changeDir(saved.right, {
+                panel: rightPanel,
+                noCurrent: true,
+                history: false,
+            });
+            
+            restored = true;
+        }
+        
+        if (restored)
+            DOM.syncPanelsHistory({
+                replace: true,
+            });
     }
     
     function getPanels() {
@@ -417,7 +469,12 @@ function CloudCmdProto({DOM, Listeners}) {
             });
             
             CloudCmd.emit('active-dir', Info.dirPath);
+            return;
         }
+        
+        DOM.syncPanelsHistory({
+            replace: true,
+        });
     }
     
     this.goToParentDir = async () => {

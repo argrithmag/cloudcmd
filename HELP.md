@@ -681,6 +681,23 @@ Cloud Commander can work in one panel mode when your screen size can't accommoda
 
 ![One file panel](/img/screen/one-file-panel.png "One file panel")
 
+## Panel paths in the URL
+
+The URL encodes the directory of **both** panels, so a bookmark restores the exact layout:
+
+```
+/fs/<left panel path>?right=<right panel path>
+```
+
+The path portion is always the left panel; the `right` query parameter (URL-encoded) is the right panel. The URL updates live as you navigate either panel, so copying the address bar at any moment captures the current layout.
+
+When the `right` parameter is absent, each panel's last-used directory is restored from the browser's `localStorage`:
+
+- visiting `/` restores both panels;
+- visiting `/fs/<path>` keeps the left panel on `<path>` (the URL stays authoritative) and restores only the right panel.
+
+An invalid right path — a missing directory, a file, or a path beyond the configured `root` — falls back to the left panel's directory. In one-file-panel mode the parameter is ignored.
+
 ## Using as middleware
 
 Cloud Commander can be used as middleware for `node.js` applications based on [socket.io](http://socket.io "Socket.IO") and [express](http://expressjs.com "Express"):

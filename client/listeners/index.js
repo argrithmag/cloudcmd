@@ -10,6 +10,8 @@ import {FS} from '#common/cloudfunc';
 import {getRange} from './get-range.js';
 import {getIndex} from './get-index.js';
 
+const isString = (a) => typeof a === 'string';
+
 const NBSP_REG = RegExp(String.fromCharCode(160), 'g');
 const SPACE = ' ';
 
@@ -464,16 +466,40 @@ function unload() {
 
 function pop() {
     Events.add('popstate', async ({state}) => {
-        const path = (state || '').replace(FS, '');
-        
-        if (!path)
+        if (!state)
             return CloudCmd.route(location.hash);
         
-        const history = false;
+        // legacy string state (pre-upgrade entries)
+        if (isString(state)) {
+            const path = state.replace(FS, '');
+            
+            if (!path)
+                return CloudCmd.route(location.hash);
+            
+            return await CloudCmd.changeDir(path, {
+                history: false,
+            });
+        }
         
-        await CloudCmd.changeDir(path, {
-            history,
-        });
+        const {left, right} = state;
+        const current = DOM.getPanelsState();
+        const activeIsLeft = DOM.getPanelPosition() === 'left';
+        
+        const apply = async (path, side, isActive) => {
+            if (!path || path === current[side])
+                return;
+            
+            const panel = DOM.getByDataName(`js-${side}`);
+            
+            await CloudCmd.changeDir(path, {
+                panel,
+                history: false,
+                noCurrent: !isActive,
+            });
+        };
+        
+        await apply(left, 'left', activeIsLeft);
+        await apply(right, 'right', !activeIsLeft);
     });
 }
 

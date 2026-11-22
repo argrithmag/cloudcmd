@@ -2,6 +2,7 @@ import path, {dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {Readable} from 'node:stream';
 import fs from 'node:fs';
+import * as win32 from 'win32';
 import {tryToCatch} from 'try-to-catch';
 import {test, stub} from 'supertape';
 import {serveOnce} from 'serve-once';
@@ -426,6 +427,89 @@ test('cloudcmd: route: content length', async (t) => {
     const result = headers.get('content-length');
     
     t.ok(result);
+    t.end();
+});
+
+const requestRightPanel = async (url, config = {}) => {
+    // depStore() reset is a no-op, stubs from previous tests persist
+    cloudcmd.depStore('win32', win32);
+    
+    const configManager = createConfigManager();
+    
+    configManager('auth', false);
+    configManager('root', fixtureDir);
+    
+    for (const [key, value] of Object.entries(config))
+        configManager(key, value);
+    
+    const {request} = serveOnce(cloudcmd, {
+        configManager,
+    });
+    
+    return await request.get(url);
+};
+
+test('cloudcmd: route: right panel: renders distinct dir', async (t) => {
+    const rightDir = path.join(fixtureDir, 'right-dir');
+    
+    fs.mkdirSync(rightDir, {
+        recursive: true,
+    });
+    
+    const {body} = await requestRightPanel('/fs/?right=%2Fright-dir');
+    
+    fs.rmdirSync(rightDir);
+    
+    const [, rightPart] = body.split('data-name="js-right"');
+    
+    t.match(rightPart, 'title="/right-dir/"', 'should render right panel with its own dir');
+    t.end();
+});
+
+test('cloudcmd: route: right panel: renders distinct dir: left keeps own dir', async (t) => {
+    const rightDir = path.join(fixtureDir, 'right-dir');
+    
+    fs.mkdirSync(rightDir, {
+        recursive: true,
+    });
+    
+    const {body} = await requestRightPanel('/fs/?right=%2Fright-dir');
+    
+    fs.rmdirSync(rightDir);
+    
+    const [leftPart] = body.split('data-name="js-right"');
+    
+    t.notOk(leftPart.includes('title="/right-dir/"'), 'should keep left panel on its own dir');
+    t.end();
+});
+
+test('cloudcmd: route: right panel: not found: falls back to left', async (t) => {
+    const {body} = await requestRightPanel('/fs/?right=%2Fnot-found');
+    
+    t.notOk(body.includes('title="/not-found/"'), 'should fall back to left dir');
+    t.end();
+});
+
+test('cloudcmd: route: right panel: beyond root: falls back to left', async (t) => {
+    const {status} = await requestRightPanel('/fs/?right=%2F..%2F..%2F..');
+    
+    t.equal(status, 200, 'should not escape root');
+    t.end();
+});
+
+test('cloudcmd: route: right panel: file: falls back to left', async (t) => {
+    const {body} = await requestRightPanel('/fs/?right=%2Fa.txt');
+    
+    t.notOk(body.includes('title="/a.txt/"'), 'should fall back to left dir');
+    t.end();
+});
+
+test('cloudcmd: route: right panel: one file panel: ignores right', async (t) => {
+    const {body} = await requestRightPanel('/fs/?right=%2Fpack', {
+        oneFilePanel: true,
+    });
+    
+    t.notOk(body.includes('data-name="js-right"'), 'should not render right panel');
     t.end();
 });
 

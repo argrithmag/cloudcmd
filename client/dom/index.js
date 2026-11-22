@@ -406,14 +406,14 @@ export async function shrinkSelection() {
 /**
  * setting history wrapper
  */
-export function setHistory(data, title, url) {
+export function setHistory(data, title, url, {replace} = {}) {
     const ret = globalThis.history;
     const {prefix} = CloudCmd;
     
     url = prefix + url;
     
     if (ret)
-        history.pushState(data, title, url);
+        history[replace ? 'replaceState' : 'pushState'](data, title, url);
     
     return ret;
 }

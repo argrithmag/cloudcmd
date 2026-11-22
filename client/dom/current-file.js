@@ -84,6 +84,65 @@ export const getCurrentDirPath = (panel = DOM.getPanel()) => {
     return path.textContent;
 };
 
+const PANELS_STORAGE = 'panels-path';
+
+const getPanelPath = (name) => {
+    const panel = DOM.getByDataName(name);
+    
+    if (!panel)
+        return null;
+    
+    return getCurrentDirPath(panel);
+};
+
+/**
+ * get both panels' directories: {left, right}
+ * right is null in one-panel mode
+ */
+export const getPanelsState = () => {
+    const left = getPanelPath('js-left');
+    
+    if (CloudCmd.config('oneFilePanel'))
+        return {
+            left,
+            right: null,
+        };
+    
+    return {
+        left,
+        right: getPanelPath('js-right'),
+    };
+};
+
+const buildPanelsUrl = ({left, right}) => {
+    let url = left === '/' ? '/' : FS + left;
+    
+    if (right !== null)
+        url += `?right=${encodeURIComponent(right)}`;
+    
+    return url;
+};
+
+/**
+ * sync browser url + localStorage with both panels' paths
+ */
+export const syncPanelsHistory = ({replace} = {}) => {
+    const state = getPanelsState();
+    const url = buildPanelsUrl(state);
+    const {prefix} = CloudCmd;
+    
+    DOM.Storage.setJson(PANELS_STORAGE, state);
+    
+    const current = location.pathname + location.search;
+    
+    if (current === prefix + url)
+        return;
+    
+    DOM.setHistory(state, null, url, {
+        replace,
+    });
+};
+
 /**
  * get link from current (or param) file
  *
@@ -198,10 +257,10 @@ export const setCurrentFile = (currentFile, options) => {
          * but it should be false
          * to prevent default behavior
          */
-        if (!o || o.history) {
-            const historyPath = path === '/' ? path : FS + path;
-            DOM.setHistory(historyPath, null, historyPath);
-        }
+        if (!o || o.history)
+            syncPanelsHistory({
+                replace: o?.replaceHistory,
+            });
     }
     
     /* scrolling to current file */

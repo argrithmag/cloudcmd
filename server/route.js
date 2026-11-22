@@ -35,6 +35,44 @@ const sendIndex = (params, data) => {
 const onceRequire = once(require);
 const getPrefix = (config) => prefixer(config('prefix'));
 
+const getRightPath = (request) => {
+    const {searchParams} = new URL(request.url, 'http://cloudcmd');
+    return searchParams.get('right');
+};
+
+async function readRightDir({config, request, read}) {
+    if (config('oneFilePanel'))
+        return null;
+    
+    const right = getRightPath(request);
+    
+    if (!right)
+        return null;
+    
+    const rightName = right.startsWith('/') ? right : `/${right}`;
+    const [resolveError, fullPath] = tryCatch(root.resolve, rightName, config('root'));
+    
+    if (resolveError)
+        return null;
+    
+    const [error, stream] = await tryToCatch(read, fullPath, {
+        root: config('root'),
+    });
+    
+    if (error)
+        return null;
+    
+    if (stream.type !== 'directory') {
+        stream.destroy?.();
+        return null;
+    }
+    
+    return {
+        files: stream.files,
+        path: format.addSlashToEnd(rightName),
+    };
+}
+
 const getReadDir = (config, {win32 = _win32} = {}) => {
     if (!config('dropbox'))
         return win32.read;
@@ -99,9 +137,20 @@ async function route({config, options, request, response}) {
     if (stream.type === 'directory') {
         const {files} = stream;
         
-        return sendIndex(p, buildIndex(config, html, {
+        const left = {
             files,
             path: format.addSlashToEnd(rootName),
+        };
+        
+        const right = await readRightDir({
+            config,
+            request,
+            read,
+        }) || left;
+        
+        return sendIndex(p, buildIndex(config, html, {
+            left,
+            right,
         }));
     }
     
@@ -118,11 +167,11 @@ async function route({config, options, request, response}) {
  */
 function indexProcessing(config, options) {
     const oneFilePanel = config('oneFilePanel');
-    const {panel} = options;
+    const {panelLeft, panelRight} = options;
     
     const left = rendy(Template.panel, {
         side: 'left',
-        content: panel,
+        content: panelLeft,
         className: !oneFilePanel ? '' : 'panel-single',
     });
     
@@ -131,7 +180,7 @@ function indexProcessing(config, options) {
     if (!oneFilePanel)
         right = rendy(Template.panel, {
             side: 'right',
-            content: panel,
+            content: panelRight,
             className: '',
         });
     
@@ -144,16 +193,20 @@ function indexProcessing(config, options) {
     });
 }
 
-function buildIndex(config, html, data) {
-    const panel = CloudFunc.buildFromJSON({
+function buildIndex(config, html, {left, right}) {
+    const build = (data) => CloudFunc.buildFromJSON({
         data,
         prefix: getPrefix(config),
         template: Template,
         showDotFiles: config('showDotFiles'),
     });
     
+    const panelRight = config('oneFilePanel') ? '' : build(right);
+    const panelLeft = build(left);
+    
     return indexProcessing(config, {
-        panel,
+        panelLeft,
+        panelRight,
         data: html,
     });
 }
