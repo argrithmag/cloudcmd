@@ -22,7 +22,7 @@ const dir = './client';
 const {NODE_ENV} = env;
 const isDev = NODE_ENV === 'development';
 
-const rootDir = new URL('..', import.meta.url).pathname;
+const rootDir = fileURLToPath(new URL('..', import.meta.url));
 const dist = resolve(rootDir, 'dist');
 const distDev = resolve(rootDir, 'dist-dev');
 const devtool = isDev ? 'eval' : 'source-map';
@@ -34,7 +34,7 @@ const noParse = (a) => a.endsWith('.spec.js');
 // uses it) keeps going through babel-loader. Everything else uses
 // Rspack's built-in SWC loader, which is the main source of the speedup.
 const rules = [{
-    test: /sw\/sw\.js$/,
+    test: /sw[\\/]sw\.js$/,
     exclude: /node_modules/,
     loader: 'babel-loader',
 }, {
@@ -42,7 +42,7 @@ const rules = [{
     resolve: {
         fullySpecified: false,
     },
-    exclude: [/node_modules/, /sw\/sw\.js$/],
+    exclude: [/node_modules/, /sw[\\/]sw\.js$/],
     loader: 'builtin:swc-loader',
     options: {
         jsc: {
@@ -56,7 +56,7 @@ const rules = [{
     },
 }, {
     test: /\.css$/,
-    include: /node_modules\/aleman/,
+    include: /node_modules[\\/]aleman/,
     type: 'asset/source',
 }];
 
