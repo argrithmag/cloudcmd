@@ -1,0 +1,43 @@
+# Self-building image: use when the build context is the git repository
+# (dist/ is gitignored, so unlike docker/Dockerfile it is built inside
+# the image instead of being expected in the build context).
+#
+# Requires BuildKit (default in modern Docker) so that
+# Dockerfile.local.dockerignore overrides the root .dockerignore,
+# which excludes the client/ sources the builder stage needs.
+FROM node:22 AS builder
+
+WORKDIR /usr/src/cloudcmd
+
+COPY . .
+
+RUN npm install --no-audit --no-fund
+RUN npm run build
+
+FROM node:22
+
+LABEL org.opencontainers.image.source="https://github.com/argrithmag/cloudcmd"
+
+RUN mkdir -p /usr/src/cloudcmd
+
+WORKDIR /usr/src/cloudcmd
+
+COPY package.json /usr/src/cloudcmd/
+
+RUN npm install --omit=dev --no-audit --no-fund && \
+    npm install gritty --omit=dev --no-audit --no-fund && \
+    npm cache clean --force
+
+COPY . /usr/src/cloudcmd
+COPY --from=builder /usr/src/cloudcmd/dist /usr/src/cloudcmd/dist
+COPY --from=builder /usr/src/cloudcmd/dist-dev /usr/src/cloudcmd/dist-dev
+
+WORKDIR /
+
+ENV cloudcmd_terminal=true
+ENV cloudcmd_terminal_path=gritty
+ENV cloudcmd_open=false
+
+EXPOSE 8000
+
+ENTRYPOINT ["/usr/src/cloudcmd/bin/cloudcmd.js"]
